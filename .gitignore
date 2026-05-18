@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+dist/
+build/
+.venv/
+venv/
+env/
+
+# Linters / Type checkers
+.ruff_cache/
+.mypy_cache/
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# Env / Config
+.env
+
+# Data (运行时数据)
+data/
+
+# Logs
+*.log
+
+# opencode 的 node_modules
+.opencode/node_modules/
+
+# openspec
+.openspec/
