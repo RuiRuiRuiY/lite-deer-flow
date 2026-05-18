@@ -1,0 +1,88 @@
+[project]
+name = "lite-deer-flow-demo"
+version = "0.1.0"
+description = "Prototype to verify core dependencies for lite-deer-flow"
+requires-python = ">=3.10"
+
+dependencies = [
+    # Core agent framework (tested: 0.4.11)
+    "deepagents>=0.4,<0.6",
+    # LangChain ecosystem (tested: langchain 1.2.12, core 1.2.22, langgraph 1.1.3)
+    "langchain>=1.0,<2.0",
+    "langchain-core>=1.0,<2.0",
+    "langgraph>=1.0,<2.0",
+    "langchain-openai>=1.0,<2.0",
+    # Search (tested: 0.2.17)
+    "langchain-tavily>=0.2",
+    # Backend API (tested: 0.135.2)
+    "fastapi>=0.130,<1.0",
+    "uvicorn>=0.30",
+    # Frontend (tested: 1.55.0)
+    "streamlit>=1.50",
+    # Persistence (tested: langgraph-checkpoint-sqlite 3.1.0, aiosqlite 0.22.1)
+    "langgraph-checkpoint-sqlite>=3.0",
+    "aiosqlite>=0.20",
+    # Config
+    "pyyaml>=6.0",
+    # Observability (optional)
+    "langsmith>=0.3",
+]
+
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=8.0",
+    "pytest-asyncio>=0.24",
+    # Linting & Formatting
+    "ruff>=0.9",
+    # Static Type Checking (Phase 1: basic mode)
+    "mypy>=1.15",
+    "types-pyyaml>=6.0",
+]
+
+# ============================================================
+# Ruff — lint + format
+# ============================================================
+[tool.ruff]
+target-version = "py310"
+line-length = 120
+
+[tool.ruff.lint]
+select = ["E", "W", "F", "I", "UP", "B", "SIM", "TCH"]
+ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+known-first-party = ["app"]
+
+# ============================================================
+# MyPy — progressive type checking (Phase 1: basic mode)
+# ============================================================
+# Strategy: catch obvious type errors first, don't force type annotations everywhere.
+# Phase 2: enable disallow_untyped_defs, disallow_incomplete_defs
+# Phase 3: enable strict = true
+# ============================================================
+[tool.mypy]
+python_version = "3.10"
+check_untyped_defs = true
+warn_return_any = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+
+[[tool.mypy.overrides]]
+module = [
+    "deepagents.*",
+    "langchain.*",
+    "langchain_openai.*",
+    "langchain_tavily.*",
+    "langgraph.*",
+    "streamlit.*",
+]
+ignore_missing_imports = true
+
+# ============================================================
+# Pytest
+# ============================================================
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]

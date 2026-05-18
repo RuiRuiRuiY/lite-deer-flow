@@ -1,0 +1,48 @@
+models:
+  primary:
+    name: "deepseek-v4-pro"
+    provider: "openai"
+    model: "deepseek-v4-pro"
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+
+  fallback:
+    name: "deepseek-v4-flash"
+    provider: "openai"
+    model: "deepseek-v4-flash"
+    base_url: "https://api.deepseek.com/v1"
+    api_key_env: "DEEPSEEK_API_KEY"
+
+search:
+  primary: tavily
+  tavily_api_key_env: "TAVILY_API_KEY"
+  fallback: exa_search
+
+server:
+  host: "127.0.0.1"
+  port: 8000
+
+sandbox:
+  type: local_shell
+  virtual_mode: true
+  timeout: 120
+
+memory:
+  type: agents_md
+  file: "AGENTS.md"
+
+skills:
+  paths:
+    - "backend/app/skills"
+
+persistence:
+  checkpointer: "sqlite"
+  db_path: "data/checkpoints.db"
+  store: "memory"
+
+agent:
+  recursion_limit: 50
+
+observability:
+  langsmith:
+    enabled: false
