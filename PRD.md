@@ -104,7 +104,7 @@
 │                                          │
 │  Web Search                              │
 │  ├── 主: Tavily (1000次/月免费)           │
-│  └── 备用: Exa Search (免费)              │
+│  └── 备用: SerpApi (免费)              │
 └──────────────────────────────────────────┘
          │
     ┌────┴─────┐
@@ -122,7 +122,7 @@
 | LLM 适配         | LangChain + langchain-openai          | 统一 OpenAI 兼容接口，支持 base_url 覆盖 |
 | 后端 API         | FastAPI + uvicorn                     | 轻量、异步、类型安全                    |
 | 前端             | Streamlit                             | 快速验证，无需前端工程化                |
-| 搜索工具         | Tavily（langchain-tavily `TavilySearch` 新版 API）+ Exa Search | 免费额度 + fallback      |
+| 搜索工具         | Tavily（langchain-tavily `TavilySearch` 新版 API）+ SerpApi | 免费额度 + fallback      |
 | Shell 执行       | Git Bash                              | Windows 环境已安装                      |
 | 配置格式         | YAML (config.yaml)                    | 与 DeerFlow 一致                        |
 | 记忆存储         | JSON 文件 / Markdown                  | 简单、可读、可手动编辑                  |
@@ -170,7 +170,7 @@ lite-deer-flow/
 │   │   │       └── memory.py      # 记忆管理
 │   │   ├── tools/
 │   │   │   ├── __init__.py
-│   │   │   └── web_search.py      # Tavily + Exa Search
+│   │   │   └── web_search.py      # Tavily + SerpApi
 │   │   └── skills/
 │   │       ├── research/
 │   │       │   └── SKILL.md       # 研究技能
@@ -384,7 +384,7 @@ async def extract_memory(conversation: list[Message]) -> MemoryEntry:
 - 专为 Agent 优化，返回结构化摘要
 - 支持深度搜索模式
 
-**备用工具: Exa Search**
+**备用工具: SerpApi**
 
 - 完全免费
 - 不稳定，可能被限流
@@ -396,7 +396,7 @@ async def web_search(query: str, max_results: int = 5) -> str:
     try:
         return await tavily_search(query, max_results)
     except (APIError, RateLimitError):
-        return await exa_search(query, max_results)
+        return await serp_search(query, max_results)
 ```
 
 ### 4.5 Sandbox / 文件系统
@@ -669,7 +669,7 @@ models:
 search:
   primary: tavily
   tavily_api_key_env: "TAVILY_API_KEY"
-  fallback: exa_search
+  fallback: serp_search
 
 server:
   host: "127.0.0.1"
@@ -735,71 +735,115 @@ LANGSMITH_API_KEY=lsv2_...
 
 ## 7. 分阶段路线图
 
-### Phase 1: 最小可运行版本（2 周）
+### Phase 0: Agent 核心验证（1-2 天）
 
-**目标**：能对话、能搜索、能返回结果，核心链路跑通
+**目标**：纯 Python 脚本验证 DeepAgents 在 Windows 环境能跑通核心流程，不引入框架和配置系统
 
-- [ ] 项目骨架搭建（monorepo 结构）
-- [ ] 测试基础设施搭建（pytest + 第一个测试用例）
-- [ ] FastAPI 主应用 + 基础路由
-- [ ] config.yaml 配置加载
-- [ ] DeepAgents Lead Agent 集成（含 `checkpointer` + `memory`）
-- [ ] Sub-Agent 基础定义（research-agent，含 web_search 工具）
-- [ ] 单模型配置与运行 + `with_fallbacks()` 包装
-- [ ] Tavily web_search 工具
-- [ ] 文件系统 + Shell 工具（DeepAgents `LocalShellBackend`）
-- [ ] Streamlit 聊天界面（基础版，同步返回）
-- [ ] AGENTS.md 手动记忆（`memory=["/AGENTS.md"]`）
-- [ ] `recursion_limit` 安全配置
+- [ ] 创建最简单的脚本：`scripts/verify_agent.py`
+- [ ] 硬编码配置一个模型（`ChatOpenAI`）
+- [ ] 创建 Lead Agent（`create_deep_agent`，单模型，无 fallback）
+- [ ] 创建 research-agent（含 `web_search` 工具，使用 Tavily API）
+- [ ] 创建 report-agent（含 `write_file` 工具）
+- [ ] 手动调用 `task()` 验证 Lead → research → report 委派流程
+- [ ] 输入一个研究问题，终端输出完整报告
 
 **验收标准**：
 
-- 输入问题 → Lead Agent 委派 research-agent 搜索 → 返回文本结果
+- `python scripts/verify_agent.py` → 输入问题 → 终端打印报告内容
+- 全流程 < 3min，无报错
+- 确认 `deepagents`、`langchain-openai`、`tavily` 在 Windows 环境兼容
+
+**不包含**（后续 Phase 引入）：
+
+- `config.yaml` 配置系统
+- `checkpointer` 持久化
+- `memory=["/AGENTS.md"]` 记忆
+- `with_fallbacks()` 多模型容灾
+- `LocalShellBackend` Sandbox
+- `skills/SKILL.md` 技能系统
+
+### Phase 1: 项目骨架 + FastAPI API（1 周）
+
+**目标**：把 Phase 0 的脚本封装成完整项目，基于 PRD 设计实现核心业务逻辑，通过 API 调用
+
+- [ ] 搭建 monorepo 项目结构（backend/ frontend/ data/）
+- [ ] `uv` + `pyproject.toml` 依赖管理
+- [ ] `config.yaml` 配置加载（模型、搜索、Sandbox、持久化）
+- [ ] FastAPI 主应用 + 基础路由
+- [ ] `POST /api/threads` 创建会话
+- [ ] `POST /api/threads/{id}/runs` 执行任务（同步返回）
+- [ ] DeepAgents Lead Agent 集成（含 `checkpointer` + `recursion_limit`）
+- [ ] 两个 Sub-Agent 完整定义（research-agent + report-agent）
+- [ ] `task()` 委派流程端到端验证
+- [ ] 单模型配置与运行（`with_fallbacks()` 预留接口，Phase 3 实现）
+- [ ] Tavily `web_search` 工具 + SerpApi fallback 预留
+- [ ] 文件系统 + Shell 工具（`LocalShellBackend`，`virtual_mode=True`）
+- [ ] AGENTS.md 手动记忆（`memory=["/AGENTS.md"]`）
+- [ ] 测试基础设施（pytest + 核心逻辑单元测试：agent 工厂、配置加载）
+
+**验收标准**：
+
+- `curl -X POST /api/threads/{id}/runs -d '{"content": "..."}'` → 返回报告内容
+- 输入问题 → Lead Agent 委派 research-agent 搜索 → 委派 report-agent 撰写 → 返回完整报告
 - 支持多轮对话（同一 thread 内，通过 `thread_id` 持久化）
-- 模型配置通过 config.yaml 管理
-- 主模型失败时自动 fallback 到备用模型
-- 核心逻辑（agent 工厂、fallback、配置加载）有对应单元测试
+- 模型配置通过 `config.yaml` 管理
+- 核心逻辑（agent 工厂、配置加载）有对应单元测试
 
-### Phase 2: 研究能力增强（1-2 周）
+### Phase 2: 流式输出 + 前端（1 周）
 
-**目标**：能分工研究、能写报告、支持流式输出
+**目标**：SSE 流式输出 + Streamlit 聊天界面，用户可直观看到 Agent 思考过程
 
-- [ ] SSE 流式输出（`agent.astream` + `text/event-stream`）
-- [ ] report-agent 定义 + report skill / SKILL.md
-- [ ] Sub-Agent 任务委派流程（`task()` 内置工具）
-- [ ] 研究工作流端到端验证（research-agent 独立完成搜索→提取→写入笔记）
+- [ ] `GET /api/threads/{id}/runs/stream` SSE 流式输出（`agent.astream` + `text/event-stream`）
+- [ ] Streamlit 聊天界面调用 FastAPI API
+- [ ] 流式消息实时展示（token 级别更新）
 - [ ] 报告文件写入与前端渲染
 - [ ] 报告下载功能
-- [ ] 多模型切换 API + 前端选择器
-- [ ] 任务取消 API
-- [ ] Streamlit 界面增强（消息历史、文件预览）
+- [ ] 消息历史持久化与展示
+- [ ] Streamlit 界面增强（文件预览、任务状态指示）
 
 **验收标准**：
 
-- 复杂任务自动分解为研究 + 报告两个阶段
-- research-agent 可独立完成研究循环（不依赖 report-agent）
+- Streamlit 界面输入问题 → 实时看到 Agent 思考过程和中间步骤
 - 生成的报告可在前端查看和下载
-- 用户可手动切换模型，主模型失败时自动 fallback
-- SSE 流式输出在 Streamlit 界面实时展示
+- SSE 流式输出延迟 < 1s（从 Agent 输出到界面展示）
 
-### Phase 3: 记忆与体验（1-2 周）
+### Phase 3: 体验增强（1 周）
 
-**目标**：跨线程记忆、可观测性、HITL
+**目标**：多模型切换、任务取消、界面完善
 
-- [ ] LLM 自动提取记忆（基础版：固定 prompt 对话结束后追加到 `/memories/extracted.md`）
-- [ ] 跨线程记忆（`CompositeBackend` + `Store`，`/memories/` 路径持久化）
-- [ ] 记忆查看/编辑 API
-- [ ] LangSmith 集成（可选开关）
-- [ ] HITL 中断确认（`interrupt_on`，Phase 1 已有 checkpointer 基础）
+- [ ] `with_fallbacks()` 多模型容灾实现
+- [ ] `GET /api/models` 返回所有可用模型和当前活跃模型
+- [ ] `PUT /api/models/active` 手动切换活跃模型
+- [ ] `POST /api/threads/{id}/runs/{run_id}/cancel` 取消正在执行的任务
+- [ ] Streamlit 侧边栏模型选择器（下拉框，切换后持久化）
+- [ ] 任务进度指示器（研究中/撰写中/完成）
 - [ ] 执行日志与错误追踪
-- [ ] `compact_conversation` 工具（手动压缩上下文，可选）
+- [ ] LangSmith 集成（可选开关）
+
+**验收标准**：
+
+- 用户可手动切换模型，主模型失败时自动 fallback 到备用模型
+- 运行中的任务可通过 API 和界面取消
+- 长任务可通过 LangSmith 查看完整 trace
+
+### Phase 4: 记忆与可观测性（1-2 周）
+
+**目标**：跨线程记忆、HITL 中断、上下文管理
+
+- [ ] 记忆查看/编辑 API（`GET /api/memory`、`PUT /api/memory`）
+- [ ] 跨线程记忆（`CompositeBackend` + `Store`，`/memories/` 路径持久化）
+- [ ] LLM 自动提取记忆（基础版：固定 prompt 对话结束后追加到 `/memories/extracted.md`）
+- [ ] HITL 中断确认（`interrupt_on`，Phase 1 已有 checkpointer 基础）
+- [ ] `POST /api/threads/{id}/runs/{run_id}/resume` 恢复被中断的任务
+- [ ] `compact_conversation` 工具（手动压缩上下文，应对长任务）
+- [ ] 记忆去重与冲突解决（进阶版）
 
 **验收标准**：
 
 - 跨会话保留用户偏好（`/memories/` 路径持久化）
 - 对话结束后自动提取关键信息并写入记忆文件
-- 长任务可通过 LangSmith 查看完整 trace
 - 用户可在关键操作（写文件、执行命令）前确认/拒绝
+- 被中断的任务可恢复继续执行
 
 ---
 
@@ -840,7 +884,7 @@ LANGSMITH_API_KEY=lsv2_...
 | 风险                 | 影响             | 缓解措施                                   |
 | -------------------- | ---------------- | ------------------------------------------ |
 | DeepAgents API 变动  | 核心依赖不稳定   | 锁定版本号（`deepagents>=0.4,<0.6`，已验证 0.4.11），关注 changelog |
-| Tavily 免费额度用完  | 搜索功能不可用   | Exa Search fallback                        |
+| Tavily 免费额度用完  | 搜索功能不可用   | SerpApi fallback                        |
 | Windows 路径兼容问题 | 文件系统工具异常 | 统一使用 pathlib，测试 Windows 路径        |
 | Windows 编码冲突（Issue #2311） | `execute` 命令崩溃 | 设置 `PYTHONIOENCODING=utf-8`，或等待官方修复 |
 | `virtual_mode` 安全限制 | shell 命令可绕过路径限制 | Phase 1 开启 `interrupt_on={"execute": True}` |
@@ -861,7 +905,7 @@ LANGSMITH_API_KEY=lsv2_...
 | 前端           | Next.js vs Streamlit                   | Streamlit (Phase 1)   | 快速验证，后续可替换                                                   |
 | 记忆系统       | 自动提取 vs 手动文件                   | 手动文件 (Phase 1)    | DeepAgents 原生 `memory` 参数支持，实现简单                          |
 | Sub-Agent 分工 | 单通用 vs 固定分工 vs 动态             | 固定分工              | context 隔离好，实现可控                                               |
-| 搜索工具       | Tavily vs Exa Search vs Jina           | Tavily + Exa Search fallback | 免费额度 + 容灾                                                        |
+| 搜索工具       | Tavily vs SerpApi vs Jina           | Tavily + SerpApi fallback | 免费额度 + 容灾                                                        |
 | Shell 执行     | Git Bash vs WSL vs PowerShell          | Git Bash              | 已安装，轻量                                                           |
 | 部署方式       | Docker vs 本地                         | 本地                  | Windows 环境，不需要 Docker                                            |
 | 产物系统       | 完整 artifact vs 简单文件              | 简单文件              | 产物类型单一，无需复杂系统                                             |
@@ -872,3 +916,4 @@ LANGSMITH_API_KEY=lsv2_...
 | Checkpointer   | MemorySaver vs AsyncSqliteSaver        | AsyncSqliteSaver      | 轻量持久化，重启不丢失会话状态                                         |
 | Context 压缩   | 手动实现 vs DeepAgents 原生            | DeepAgents 原生       | 内置 `SummarizationMiddleware` 自动 offload + summarization，无需额外配置 |
 | 模型初始化时机 | 传入字符串 vs 传入预配置实例            | 传入字符串            | `create_deep_agent(model="...")` 会立即初始化模型并校验 API key，需确保环境变量提前设置；Phase 1 使用 dummy key 兜底 |
+| 开发顺序       | 先前端 vs 先 API vs 先 Agent 核心       | Agent 核心 → API → 前端 | Phase 0 纯脚本验证 Agent 能跑通，Phase 1 封装 FastAPI API，Phase 2 再加 Streamlit 前端，避免过早引入框架导致混乱 |
